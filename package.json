@@ -1,0 +1,18 @@
+{
+  "name": "hl-discord-rpc-taiga",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hlmasterchief/discord-rpc-taiga.git"
+  },
+  "author": "hl",
+  "bugs": {
+    "url": "https://github.com/hlmasterchief/discord-rpc-taiga/issues"
+  },
+  "homepage": "https://github.com/hlmasterchief/discord-rpc-taiga#readme"
+}
