@@ -11,11 +11,10 @@ const activity = {};
 let activityTimer;
 const activityInterval = (Number(process.env.DISCORD_INTERVAL) > 0) ? process.env.DISCORD_INTERVAL * 1000 : 15e3;
 const services = ['anilist', 'myanimelist', 'kitsu'];
-let service = 'anilist';
 
-rpc.login({ clientId }).catch(console.error);
 rpc.on('ready', () => console.log(`discord-rpc-taiga is using clientId: ${clientId}`));
 rpc.on('error', console.error);
+rpc.on('disconnected', () => console.log('discord disconnected'));
 
 app.use(express.urlencoded({ extended: false }));
 app.get('/', (req, res) => res.send('discord-rpc-taiga'));
@@ -33,6 +32,7 @@ app.post('/taiga', (req, res) => {
     }
 
     const anime = req.body;
+    let service = 'anilist';
     services.forEach(element => {
         if (anime.picurl && anime.picurl.includes(element)) service = element;
     });
@@ -58,8 +58,8 @@ app.get('/taiga/start', (req, res) => {
     activity.state          = 'Episode 0/0';
     activity.largeImageKey  = 'default';
     activity.largeImageText = activity.details;
-    activity.smallImageKey  = service;
-    activity.smallImageText = service;
+    activity.smallImageKey  = 'anilist';
+    activity.smallImageText = activity.smallImageKey;
     activity.startTimestamp = Date.now();
 
     startActivity();
@@ -71,7 +71,12 @@ app.get('/taiga/stop', (req, res) => {
     res.send('Stop');
 });
 
-app.listen(port, () => console.log(`discord-rpc-taiga is listening at http://localhost:${port}`));
+startApp();
+
+async function startApp() {
+    await rpc.login({ clientId }).catch(console.error);
+    app.listen(port, () => console.log(`discord-rpc-taiga is listening at http://localhost:${port}`));
+}
 
 function startActivity() {
     if (activityTimer) clearInterval(activityTimer);
