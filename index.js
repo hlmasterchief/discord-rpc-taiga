@@ -1,6 +1,7 @@
 const dotenv = require('dotenv');
 const express = require('express');
 const DiscordRPC = require('discord-rpc');
+const readline = require('readline');
 
 dotenv.config();
 const port = process.env.PORT;
@@ -54,21 +55,30 @@ app.post('/taiga', (req, res) => {
 });
 
 app.get('/taiga/start', (req, res) => {
-    activity.details        = 'A Random Anime';
-    activity.state          = 'Episode 0/0';
-    activity.largeImageKey  = 'default';
-    activity.largeImageText = activity.details;
-    activity.smallImageKey  = 'anilist';
-    activity.smallImageText = activity.smallImageKey;
-    activity.startTimestamp = Date.now();
-
-    startActivity();
+    testActivity();
     res.send('Start');
 });
 
 app.get('/taiga/stop', (req, res) => {
     stopActivity();
     res.send('Stop');
+});
+
+readline.emitKeypressEvents(process.stdin);
+if (process.stdin.isTTY) process.stdin.setRawMode(true);
+process.stdin.on('keypress', (str, key) => {
+    if (key.sequence === '\u0003') {
+        return process.exit();
+    }
+
+    switch (str) {
+        case 's':
+            return testActivity();
+        case 'x':
+            return stopActivity();
+        case 'q':
+            return process.exit();
+    }
 });
 
 startApp();
@@ -92,4 +102,16 @@ function stopActivity() {
 function envBool(string) {
     if (string === 'true') return true;
     return false;
+}
+
+function testActivity() {
+    activity.details        = 'A Random Anime';
+    activity.state          = 'Episode 0/0';
+    activity.largeImageKey  = 'default';
+    activity.largeImageText = activity.details;
+    activity.smallImageKey  = 'anilist';
+    activity.smallImageText = activity.smallImageKey;
+    activity.startTimestamp = Date.now();
+
+    startActivity();
 }
