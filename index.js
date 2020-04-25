@@ -27,9 +27,11 @@ app.post('/taiga', (req, res) => {
         case 'stopped':
             stopActivity();
             return res.send('Stop');
+        case 'updated':
+            return res.send('Update');
         default:
-            console.log('Problem');
-            return res.send('Problem');
+            console.log('Unknown request');
+            return res.send('Unknown request');
     }
 
     const anime = req.body;
