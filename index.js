@@ -3,6 +3,7 @@ const express = require('express');
 const DiscordRPC = require('discord-rpc');
 const readline = require('readline');
 const axios = require('axios');
+const sharp = require('sharp');
 
 dotenv.config();
 const port = process.env.PORT;
@@ -203,7 +204,18 @@ async function uploadCover(anime, service) {
         return console.log('Image type is not supported.');
     }
 
-    const img = res.data;
+    let img = res.data;
+    if (envBool(process.env.RESIZE_COVER)) {
+        try {
+            img = await sharp(res.data).metadata()
+                .then(({ width }) => {
+                    if (width >= 512) return res.data;
+                    return sharp(res.data).resize(512).toBuffer();
+                });
+        } catch (error) {
+            console.error(error);
+        }
+    }
     new_asset.image = `data:${res.headers['content-type']};base64,${img.toString('base64')}`;
 
     if (assets.length >= assetsLimit) {
