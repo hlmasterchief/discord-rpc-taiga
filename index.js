@@ -2,6 +2,7 @@ const dotenv = require('dotenv');
 const express = require('express');
 const DiscordRPC = require('discord-rpc');
 const readline = require('readline');
+const axios = require('axios');
 
 dotenv.config();
 const port = process.env.PORT;
@@ -12,6 +13,15 @@ const activity = {};
 let activityTimer;
 const activityInterval = (Number(process.env.DISCORD_INTERVAL) > 0) ? process.env.DISCORD_INTERVAL * 1000 : 15e3;
 const services = ['anilist', 'myanimelist', 'kitsu'];
+let customCover = Boolean(process.env.DISCORD_AUTHORIZATION) && envBool(process.env.SHOW_COVER);
+const url = `https://discordapp.com/api/oauth2/applications/${clientId}/assets`;
+let assets = [];
+const assetsLimit = parseInt(process.env.DISCORD_ASSET_LIMIT) || 140;
+
+axios.defaults.headers.common['origin'] = 'https://discordapp.com';
+axios.defaults.headers.common['referer'] = `https://discordapp.com/developers/applications/${clientId}/rich-presence/assets`;
+axios.defaults.headers.common['cache-control'] = 'no-cache';
+axios.defaults.headers.common['user-agent'] = 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) discord/0.0.306 Chrome/78.0.3904.130 Electron/7.1.11 Safari/537.36';
 
 rpc.on('ready', () => console.log(`discord-rpc-taiga is using clientId: ${clientId}`));
 rpc.on('error', console.error);
@@ -52,6 +62,7 @@ app.post('/taiga', (req, res) => {
     activity.smallImageText = smallImageText;
     activity.startTimestamp = Date.now();
 
+    if (customCover && anime.id && anime.picurl) uploadCover(anime, service);
     startActivity();
     res.send('Start');
 });
@@ -86,6 +97,24 @@ process.stdin.on('keypress', (str, key) => {
 startApp();
 
 async function startApp() {
+    if (customCover) {
+        let res;
+        try {
+            res = await axios.get(url);
+        } catch (error) {
+            errorAxios(error, 'Getting cover list');
+        }
+
+        if (!res || !Array.isArray(res.data)) {
+            console.log('There is a problem with discord.');
+            disableCover();
+        } else {
+            const assetsDefault = services.slice(0);
+            assetsDefault.push('default');
+            assets = res.data.filter(asset => !assetsDefault.includes(asset.name));
+        }
+    }
+
     await rpc.login({ clientId }).catch(console.error);
     app.listen(port, () => console.log(`discord-rpc-taiga is listening at http://localhost:${port}`));
 }
@@ -116,4 +145,92 @@ function testActivity() {
     activity.startTimestamp = Date.now();
 
     startActivity();
+}
+
+function errorAxios(err, act) {
+    if (err.response) return console.log(`${act} failed.`, err.response.status, err.response.statusText);
+    if (err.request) return console.log(`${act} failed, no response.`);
+    if (err.message) return console.error(err.message);
+    console.error(err);
+}
+
+function disableCover() {
+    customCover = false;
+    console.log('Custom cover is disabled!');
+}
+
+function imgLarge(url, service) {
+    switch (service) {
+        case 'anilist':
+            return url.replace('medium', 'large');
+        case 'myanimelist':
+            return url.replace('.jpg', 'l.jpg');
+        case 'kitsu':
+            return url.replace('small', 'large');
+        default:
+            return url;
+    }
+}
+
+async function uploadCover(anime, service) {
+    const new_asset = {
+        name: `${service}_${anime.id}`,
+        image: '',
+        type: 1
+    }
+    if (assets.some(asset => asset.name === new_asset.name)) {
+        activity.largeImageKey = new_asset.name;
+        return;
+    }
+
+    const imgUrl = imgLarge(anime.picurl, service);
+    let res;
+    try {
+        res = await axios.get(imgUrl, { responseType: 'arraybuffer' });
+    } catch (error) {
+        return errorAxios(error, 'Getting cover image');
+    }
+
+    if (!res) return console.log(`There is a problem with ${service}.`);
+
+    const typeAllow = ['image/png', 'image/jpeg'];
+
+    if (!res.headers['content-type'] || !res.headers['content-length']) {
+        return console.log('Image link is not supported.');
+    }
+
+    if (!typeAllow.includes(res.headers['content-type'])) {
+        return console.log('Image type is not supported.');
+    }
+
+    const img = res.data;
+    new_asset.image = `data:${res.headers['content-type']};base64,${img.toString('base64')}`;
+
+    if (assets.length >= assetsLimit) {
+        const asset = assets.shift();
+        const url_asset = `${url}/${asset.id}`;
+        let res;
+        try {
+            res = await axios.delete(url_asset, { headers: { 'authorization': process.env.DISCORD_AUTHORIZATION }});
+        } catch (error) {
+            errorAxios(error, 'Deleting cover image');
+            return disableCover();
+        }
+    }
+
+    res = undefined;
+    try {
+        res = await axios.post(url, new_asset, { headers: { 'authorization': process.env.DISCORD_AUTHORIZATION }});
+    } catch (error) {
+        errorAxios(error, 'Uploading cover image');
+        return disableCover();
+    }
+
+    if (!res || !res.data.id || !res.data.name) {
+        console.log('There is a problem with discord.');
+        return disableCover();
+    }
+
+    assets.push(res.data);
+    activity.largeImageKey = res.data.name;
 }
