@@ -189,7 +189,13 @@ async function uploadCover(anime, service) {
     try {
         res = await axios.get(imgUrl, { responseType: 'arraybuffer' });
     } catch (error) {
-        return errorAxios(error, 'Getting cover image');
+        errorAxios(error, 'Getting large cover image');
+
+        try {
+            res = await axios.get(anime.picurl, { responseType: 'arraybuffer' });
+        } catch (error) {
+            return errorAxios(error, 'Getting cover image');
+        }
     }
 
     if (!res) return console.log(`There is a problem with ${service}.`);
