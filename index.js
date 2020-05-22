@@ -10,6 +10,7 @@ const port = process.env.PORT;
 const app = express();
 const clientId = process.env.DISCORD_CLIENT_ID;
 const rpc = new DiscordRPC.Client({ transport: 'ipc' });
+let connected = false;
 const activity = {};
 let activityTimer;
 const activityInterval = (Number(process.env.DISCORD_INTERVAL) > 0) ? process.env.DISCORD_INTERVAL * 1000 : 15e3;
@@ -24,9 +25,16 @@ axios.defaults.headers.common['referer'] = `https://discordapp.com/developers/ap
 axios.defaults.headers.common['cache-control'] = 'no-cache';
 axios.defaults.headers.common['user-agent'] = 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) discord/0.0.306 Chrome/78.0.3904.130 Electron/7.1.11 Safari/537.36';
 
-rpc.on('ready', () => console.log(`discord-rpc-taiga is using clientId: ${clientId}`));
+rpc.on('ready', () => {
+    connected = true;
+    console.log(`discord-rpc-taiga is using clientId: ${clientId}`);
+});
 rpc.on('error', console.error);
-rpc.on('disconnected', () => console.log('discord disconnected'));
+rpc.on('disconnected', () => {
+    if (activityTimer) clearInterval(activityTimer);
+    connected = false;
+    console.log('discord disconnected');
+});
 
 app.use(express.urlencoded({ extended: false }));
 app.get('/', (req, res) => res.send('discord-rpc-taiga'));
@@ -92,6 +100,10 @@ process.stdin.on('keypress', (str, key) => {
             return stopActivity();
         case 'q':
             return process.exit();
+        case 'r':
+            if (connected) return;
+            rpc._connectPromise = undefined;
+            rpc.login({ clientId }).catch(console.error);
     }
 });
 
@@ -117,17 +129,22 @@ async function startApp() {
     }
 
     await rpc.login({ clientId }).catch(console.error);
-    app.listen(port, () => console.log(`discord-rpc-taiga is listening at http://localhost:${port}`));
+    app.listen(port, () => {
+        console.log(`discord-rpc-taiga is listening at http://localhost:${port}`);
+        console.log('Press R to reconnect, Q to quit, X to stop, S to test');
+    });
 }
 
 function startActivity() {
     if (activityTimer) clearInterval(activityTimer);
+    if (!connected) return;
     rpc.setActivity(activity);
     activityTimer = setInterval(() => rpc.setActivity(activity), activityInterval);
 }
 
 function stopActivity() {
     if (activityTimer) clearInterval(activityTimer);
+    if (!connected) return;
     rpc.clearActivity();
 }
 
